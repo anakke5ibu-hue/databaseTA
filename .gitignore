@@ -1,0 +1,96 @@
+# --- Database & Config ---
+# File konfigurasi yang biasanya berisi password/host
+.env
+config.json
+database.yml
+
+# --- PostgreSQL Specific ---
+# Jika kamu menyimpan backup atau dump data di dalam folder project
+*.sql
+*.dump
+*.tar
+/backups/
+/pgdata/
+
+# --- Python / Data Science (Jika pakai Python/Psycopg2) ---
+__pycache__/
+*.py[cod]
+venv/
+.ipynb_checkpoints/
+
+# --- Node.js (Jika pakai Sequelize/Prisma/TypeORM) ---
+node_modules/
+dist/
+.prisma/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# --- OS & IDE ---
+.DS_Store
+.vscode/
+.idea/
+Thumbs.db
+
+# --- Build Outputs ---
+dist/
+build/
+out/
+*.exe
+*.dll
+*.so
+*.war
+*.ear
+
+# --- OS Metadata ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDE / Editors ---
+.visualstudio/
+.vscode/
+.idea/
+*.swp
+*.sublime-project
+
+# --- Dependencies ---
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# PHP / Composer
+vendor/
+.phpunit.result.cache
+
+# --- Environment Variables (RAHASIA!) ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Virtual Environment
+venv_parkir/
+.venv_parkir/
+env/
+bin/
+include/
+lib/
+share/
+pyvenv.cfg
+
+yolov11n-face_openvino_model/
+buffalo_sc_rec.bin
+buffalo_sc_rec.xml
+yolov11n-face.pt
