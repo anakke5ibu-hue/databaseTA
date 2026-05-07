@@ -96,6 +96,7 @@ def home():
     return {"status": "Online", "message": "Jembatan FastAPI-PostgreSQL Siap!"}
 
 # ─── Identifikasi Wajah ───────────────────────────────────────
+# ─── Identifikasi Wajah ───────────────────────────────────────
 @app.post("/identify-face")
 def identify_face(request: SearchRequest):
     print(f"ANGKA EMBEDDING DARI GATE: {request.embedding}")
@@ -106,7 +107,7 @@ def identify_face(request: SearchRequest):
         vector_str = str(request.embedding)
 
         query = """
-            SELECT u.nama, u.nim, w.embedding <=> %s AS distance
+            SELECT u.nama, u.nim, u.is_blocked, w.embedding <=> %s AS distance
             FROM users_parkir u
             JOIN wajah_embeddings w ON u.id = w.user_id
             ORDER BY distance ASC
@@ -117,7 +118,7 @@ def identify_face(request: SearchRequest):
         result = cur.fetchone()
 
         if result:
-            print(f"DEBUG SERVER -> Terdeteksi: {result['nama']} | Distance: {result['distance']}")
+            print(f"DEBUG SERVER -> Terdeteksi: {result['nama']} | Distance: {result['distance']} | Blocked: {result['is_blocked']}")
         else:
             print("DEBUG SERVER -> Tidak ada wajah yang mirip di database")
 
@@ -125,14 +126,17 @@ def identify_face(request: SearchRequest):
         conn.close()
 
         if result and result['distance'] < 0.5:
-            return {
-                "status": "success",
-                "data": {
-                    "nama": result['nama'],
-                    "nim": result['nim'],
-                    "similarity": round(1 - result['distance'], 2)
+            if result['is_blocked']:
+                return {"status": "unknown", "message": "Akses ditolak (akun diblokir)"}
+            else:
+                return {
+                    "status": "success",
+                    "data": {
+                        "nama": result['nama'],
+                        "nim": result['nim'],
+                        "similarity": round(1 - result['distance'], 2)
+                    }
                 }
-            }
         else:
             return {"status": "unknown", "message": "Wajah tidak dikenali"}
 
@@ -230,8 +234,9 @@ def get_users():
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor(cursor_factory=RealDictCursor)
         cur.execute("""
+                    
             SELECT 
-                u.id, u.nama, u.nim,
+                u.id, u.nama, u.nim, u.is_blocked,
                 l.waktu AS jam_terakhir,
                 l.tanggal AS tanggal_terakhir
             FROM users_parkir u
@@ -249,30 +254,96 @@ def get_users():
         return list(results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # ─── Ambil daftar NIM yang diblokir (dipanggil deteksi_final.py) ──
+@app.get("/blokir_user")
+def get_blokir_user():
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        # Ambil hanya user yang is_blocked = TRUE
+        cur.execute("SELECT nim FROM users_parkir WHERE is_blocked = TRUE;")
+        results = cur.fetchall()
+        cur.close()
+        conn.close()
+        return list(results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-# ─── Hapus User / Blokir (hapus dari users_parkir) ────────────
-@app.delete("/users/{nim}")
-def delete_user(nim: str):
+# ─── Blokir User (set is_blocked = TRUE & catat ke blokir_user) ───
+@app.post("/users/{nim}/block")
+def block_user(nim: str):
     try:
         conn = psycopg2.connect(**DB_CONFIG)
         cur = conn.cursor()
+        # Update status blokir
+        cur.execute("UPDATE users_parkir SET is_blocked = TRUE WHERE nim = %s RETURNING id", (nim,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+        
+        # Catat ke tabel blokir_user
         cur.execute("""
-            DELETE FROM wajah_embeddings
-            WHERE user_id = (SELECT id FROM users_parkir WHERE nim = %s);
+            INSERT INTO blokir_user (nama, nim, waktu, tanggal, status, alasan)
+            SELECT nama, nim, NOW()::text, CURRENT_DATE, 'BLOKIR', 'Diblokir oleh admin'
+            FROM users_parkir WHERE nim = %s
         """, (nim,))
-        cur.execute("DELETE FROM users_parkir WHERE nim = %s RETURNING id;", (nim,))
-        deleted = cur.fetchone()
+        
         conn.commit()
         cur.close()
         conn.close()
-        if deleted:
-            return {"status": "success", "message": f"User {nim} berhasil dihapus"}
-        else:
-            raise HTTPException(status_code=404, detail="User tidak ditemukan")
-    except HTTPException:
-        raise
+        return {"status": "success", "message": f"User {nim} diblokir"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Unblock User (set is_blocked = FALSE & catat ke blokir_user) ───
+@app.post("/users/{nim}/unblock")
+def unblock_user(nim: str):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("UPDATE users_parkir SET is_blocked = FALSE WHERE nim = %s RETURNING id", (nim,))
+        user = cur.fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+        
+        # Catat ke tabel blokir_user
+        cur.execute("""
+            INSERT INTO blokir_user (nama, nim, waktu, tanggal, status, alasan)
+            SELECT nama, nim, NOW()::text, CURRENT_DATE, 'UNBLOKIR', 'Dibuka blokir oleh admin'
+            FROM users_parkir WHERE nim = %s
+        """, (nim,))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        return {"status": "success", "message": f"User {nim} diunblok"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# # ─── Hapus User / Blokir (hapus dari users_parkir) ────────────
+# @app.delete("/users/{nim}")
+# def delete_user(nim: str):
+#     try:
+#         conn = psycopg2.connect(**DB_CONFIG)
+#         cur = conn.cursor()
+#         cur.execute("""
+#             DELETE FROM wajah_embeddings
+#             WHERE user_id = (SELECT id FROM users_parkir WHERE nim = %s);
+#         """, (nim,))
+#         cur.execute("DELETE FROM users_parkir WHERE nim = %s RETURNING id;", (nim,))
+#         deleted = cur.fetchone()
+#         conn.commit()
+#         cur.close()
+#         conn.close()
+#         if deleted:
+#             return {"status": "success", "message": f"User {nim} berhasil dihapus"}
+#         else:
+#             raise HTTPException(status_code=404, detail="User tidak ditemukan")
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=str(e))
 
 # ─── Simpan Log Akses (dipanggil realtime dari Dashboard) ─────
 @app.post("/log_akses")
@@ -317,6 +388,7 @@ def get_logs():
         return list(results)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 # ═══════════════════════════════════════════════════════════════
 # SQL UNTUK BUAT TABEL (jalankan sekali di psql kalau belum ada)
