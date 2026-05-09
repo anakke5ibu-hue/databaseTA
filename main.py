@@ -44,6 +44,47 @@ DB_CONFIG = {
     "port": "5432"
 }
 
+# Path ke file face_database.pkl milik deteksi_final.py
+# Sesuaikan dengan lokasi folder recog kamu
+PKL_PATH = "models/face_database.pkl"
+
+def update_pkl_database(nama: str, nim: str, embedding: np.ndarray):
+    """
+    Update file face_database.pkl agar user baru langsung dikenali
+    oleh deteksi_final.py TANPA perlu restart server.
+    """
+    import pickle
+    from pathlib import Path
+
+    db_path = Path(PKL_PATH)
+    key = f"{nim}_{nama}"
+
+    if db_path.exists():
+        with open(db_path, "rb") as f:
+            db = pickle.load(f)
+        embeddings = db.get("embeddings", np.array([]))
+        names      = db.get("names", [])
+        if not isinstance(embeddings, np.ndarray) or embeddings.ndim < 2:
+            embeddings = np.array(embeddings).reshape(-1, embedding.shape[0]) if len(embeddings) else np.empty((0, embedding.shape[0]))
+    else:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        embeddings = np.empty((0, embedding.shape[0]))
+        names      = []
+
+    # Kalau nim sudah ada, update embedding-nya (jangan duplikat)
+    if key in names:
+        idx = names.index(key)
+        embeddings[idx] = embedding
+        print(f"[PKL] Update embedding untuk {key}")
+    else:
+        embeddings = np.vstack([embeddings, embedding.reshape(1, -1)])
+        names.append(key)
+        print(f"[PKL] Tambah user baru ke pkl: {key}")
+
+    with open(db_path, "wb") as f:
+        pickle.dump({"embeddings": embeddings, "names": names}, f)
+    print(f"[PKL] face_database.pkl diperbarui — total {len(names)} orang")
+
 # ═══════════════════════════════════════════════════════════════
 # MODELS
 # ═══════════════════════════════════════════════════════════════
@@ -223,6 +264,13 @@ async def register_from_photos(
         cur.close()
         conn.close()
         print(f"[DB] User {nama} ({nim}) berhasil disimpan ke database")
+
+        # ── Update face_database.pkl agar langsung dikenali tanpa restart ──
+        try:
+            update_pkl_database(nama, nim, final_embedding)
+        except Exception as pkl_err:
+            print(f"[WARNING] Gagal update pkl: {pkl_err} — tapi data sudah tersimpan di DB")
+
         return {"message": f"User {nama} ({nim}) berhasil didaftarkan dari {len(all_embeddings)} foto!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Gagal simpan ke database: {str(e)}")

@@ -4,7 +4,7 @@ import os
 from pgvector.psycopg2 import register_vector
 
 # --- KONFIGURASI ---
-FILE_PKL = 'face_database.pkl'
+FILE_PKL = 'face_database25.pkl'
 DB_CONFIG = {
     "host": "localhost",
     "database": "postgres", # Pastikan nama DB sesuai pgAdmin
