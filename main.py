@@ -369,29 +369,29 @@ def unblock_user(nim: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# # ─── Hapus User / Blokir (hapus dari users_parkir) ────────────
-# @app.delete("/users/{nim}")
-# def delete_user(nim: str):
-#     try:
-#         conn = psycopg2.connect(**DB_CONFIG)
-#         cur = conn.cursor()
-#         cur.execute("""
-#             DELETE FROM wajah_embeddings
-#             WHERE user_id = (SELECT id FROM users_parkir WHERE nim = %s);
-#         """, (nim,))
-#         cur.execute("DELETE FROM users_parkir WHERE nim = %s RETURNING id;", (nim,))
-#         deleted = cur.fetchone()
-#         conn.commit()
-#         cur.close()
-#         conn.close()
-#         if deleted:
-#             return {"status": "success", "message": f"User {nim} berhasil dihapus"}
-#         else:
-#             raise HTTPException(status_code=404, detail="User tidak ditemukan")
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=str(e))
+# ─── Hapus User / Blokir (hapus dari users_parkir) ────────────
+@app.delete("/users/{nim}")
+def delete_user(nim: str):
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM wajah_embeddings
+            WHERE user_id = (SELECT id FROM users_parkir WHERE nim = %s);
+        """, (nim,))
+        cur.execute("DELETE FROM users_parkir WHERE nim = %s RETURNING id;", (nim,))
+        deleted = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        if deleted:
+            return {"status": "success", "message": f"User {nim} berhasil dihapus"}
+        else:
+            raise HTTPException(status_code=404, detail="User tidak ditemukan")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ─── Simpan Log Akses (dipanggil realtime dari Dashboard) ─────
 @app.post("/log_akses")
