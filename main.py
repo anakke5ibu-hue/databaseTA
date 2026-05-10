@@ -37,7 +37,7 @@ app.add_middleware(
 
 # Konfigurasi Database
 DB_CONFIG = {
-    "host": "100.89.141.47",
+    "host": "localhost",
     "database": "postgres",
     "user": "postgres",
     "password": "2026",
