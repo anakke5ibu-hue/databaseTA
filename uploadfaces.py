@@ -4,7 +4,7 @@ import os
 from pgvector.psycopg2 import register_vector
 
 # --- KONFIGURASI ---
-FILE_PKL = 'face_database25.pkl'
+FILE_PKL = "C:\\Users\\syawal\\Downloads\\Database TA\\embeddings\\face_database.pkl"
 DB_CONFIG = {
     "host": "localhost",
     "database": "postgres", # Pastikan nama DB sesuai pgAdmin
