@@ -48,6 +48,39 @@ DB_CONFIG = {
 # Sesuaikan dengan lokasi folder recog kamu
 PKL_PATH = "models/face_database.pkl"
 
+# Folder untuk menyimpan foto hasil crop + CLAHE per orang
+SAVE_FACES_DIR = "saved_faces"
+
+def apply_clahe(img_bgr: np.ndarray) -> np.ndarray:
+    """Normalisasi pencahayaan adaptif pada channel L (LAB), warna tidak berubah."""
+    lab       = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+    l, a, b   = cv2.split(lab)
+    clahe     = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l_enhanced = clahe.apply(l)
+    return cv2.cvtColor(cv2.merge((l_enhanced, a, b)), cv2.COLOR_LAB2BGR)
+
+def save_face_clahe(face_crop: np.ndarray, nama: str, nim: str):
+    """
+    Crop wajah → resize 112x112 → CLAHE → simpan ke saved_faces/NamaOrang/
+    Format nama file: NIM_NamaOrang_001.jpg, 002.jpg, dst.
+    """
+    from pathlib import Path
+
+    safe_name  = "".join(c for c in nama if c.isalnum() or c in (' ', '_', '-')).strip()
+    person_dir = Path(SAVE_FACES_DIR) / safe_name
+    person_dir.mkdir(parents=True, exist_ok=True)
+
+    # Nomor urut berdasarkan file yang sudah ada
+    idx    = len(list(person_dir.glob(f"{nim}_*.jpg"))) + 1
+    prefix = f"{nim}_{safe_name}_{idx:03d}"
+
+    # Resize → CLAHE → simpan
+    face_resized = cv2.resize(face_crop, (112, 112), interpolation=cv2.INTER_AREA)
+    face_clahe   = apply_clahe(face_resized)
+    save_path    = person_dir / f"{prefix}.jpg"
+    cv2.imwrite(str(save_path), face_clahe)
+    print(f"[SAVE] {save_path}")
+
 def update_pkl_database(nama: str, nim: str, embedding: np.ndarray):
     """
     Update file face_database.pkl agar user baru langsung dikenali
@@ -166,7 +199,7 @@ def identify_face(request: SearchRequest):
         cur.close()
         conn.close()
 
-        if result and result['distance'] < 0.5:
+        if result and result['distance'] < 0.4:
             if result['is_blocked']:
                 return {"status": "unknown", "message": "Akses ditolak (akun diblokir)"}
             else:
@@ -233,6 +266,12 @@ async def register_from_photos(
 
         if face_crop.size == 0:
             continue
+
+        # ── Simpan hasil crop + CLAHE ke disk ─────────────────
+        try:
+            save_face_clahe(face_crop, nama, nim)
+        except Exception as save_err:
+            print(f"[WARNING] Gagal simpan foto: {save_err} — proses embedding tetap lanjut")
 
         # Preprocessing ArcFace: resize 112x112, NCHW, normalisasi InsightFace
         face_resized = cv2.resize(face_crop, (112, 112))
